@@ -1,6 +1,6 @@
 var nomnoml = nomnoml || {}
 
-nomnoml.parse = function (source, focus){
+nomnoml.parse = function (source, expandedNodes){
 	function onlyCompilables(line){
 		var ok = line[0] !== '#' && line.substring(0,2) !== '//'
 		return ok ? line : ''
@@ -21,57 +21,59 @@ nomnoml.parse = function (source, focus){
 	}))
 	var pureDiagramCode = _.map(_.pluck(lines, 'text'), onlyCompilables).join('\n').trim()
 	var ast = nomnoml.transformParseIntoSyntaxTree(nomnoml.intermediateParse(pureDiagramCode))
-	var focusAst = nomnoml.transformParseIntoSyntaxTree(nomnoml.intermediateParse(pureDiagramCode, focus))
+	var focusAst = nomnoml.transformParseIntoSyntaxTree(nomnoml.intermediateParse(pureDiagramCode, expandedNodes))
 	ast.directives = directives
 	return { ast: ast, focusAst: focusAst }
 }
 
-nomnoml.intermediateParse = function (source, focus){
+nomnoml.intermediateParse = function (source, expandedNodes){
 	var arr = nomnomlCoreParser.parse(source)
 	var narr
-	if (focus) {
-		var focusPath = focus.split(">")
-		narr = nomnoml.focusParse(arr, focusPath)
-	} else {
-		narr = arr
-	}
+	narr = nomnoml.focusParse(arr, expandedNodes)
 	return narr
 }
 
-nomnoml.focusParse = function(arr, focusPath) {
+nomnoml.focusParse = function(arr, expandedNodes) {
+	expandedNodes = expandedNodes || {}
 	var narr
-	var path = focusPath.shift()
 	narr = arr.map(function(i) {
-		if (path == "Root" || path == undefined) {
-			var ni
-			if (i.parts) {
-	  		ni = Object.assign({}, i, {parts:
-				  i.parts && i.parts.length > 0 ? i.parts[0] : []
-  			})
-			} else {
-				ni = i
-			}
-			return !i.id ? ni : null
-		} else {
-			if (path && i.id == path) {
-				var resp = Object.assign({}, i, {
-					parts: i.parts.map(function(p) {
-						return nomnoml.focusParse(p, focusPath.slice())
-					})
-				})
-				return resp
-			} else {
-				var ni
-				if (i.parts) {
-		  		ni = Object.assign({}, i, {parts:
-					  i.parts && i.parts.length > 0 ? i.parts[0] : []
-	  			})
-				} else {
-					ni = i
+		if (i.start) {
+			i.start.expandable = i.start.parts.length > 1
+			if (!expandedNodes[i.start.id]) {
+				if (i.start.parts.length > 0) {
+					i.start.parts = [i.start.parts[0]]
 				}
-				return !i.id ? ni : null
+			} else if (i.start.parts.length > 0) {
+				i.start.parts = i.start.parts.map(function(p) {
+					return nomnoml.focusParse(p, expandedNodes)
+				})
 			}
 		}
+		if (i.end) {
+			i.end.expandable = i.end.parts.length > 1
+			if (!expandedNodes[i.end.id]) {
+				if (i.end.parts.length > 0) {
+					i.end.parts = [i.end.parts[0]]
+				}
+			} else if (i.end.parts.length > 0) {
+				i.end.parts = i.end.parts.map(function(p) {
+					return nomnoml.focusParse(p, expandedNodes)
+				})
+			}
+		}
+		if (i.id) {
+			i.expandable = i.parts.length > 1
+			if (!expandedNodes[i.id]) {
+				if (i.parts.length > 0) {
+					i.parts = [i.parts[0]]
+				}
+			} else if (i.parts.length > 0) {
+				i.parts = i.parts.map(function(p) {
+					return nomnoml.focusParse(p, expandedNodes)
+				})
+			}
+		}
+		return i
 	}).filter(function(i) { return i })
 	return narr
 }
@@ -105,7 +107,12 @@ nomnoml.transformParseIntoSyntaxTree = function (entity){
 		})
 		var allClassifiers = _.map(rawClassifiers, transformItem)
 		var noDuplicates = _.map(_.groupBy(allClassifiers, 'name'), function (cList){
-			return _.max(cList, function (c){ return c.compartments.length })
+			return Object.assign({},
+				_.max(cList, function (c){ return c.compartments.length }),
+				{
+					expandable: _.any(cList.map(function(c) { return c.expandable }))
+				}
+			)
 		})
 
 		return nomnoml.Compartment(lines, noDuplicates, relations)
@@ -118,7 +125,7 @@ nomnoml.transformParseIntoSyntaxTree = function (entity){
 			return transformCompartment(entity)
 		if (entity.parts){
 			var compartments = _.map(entity.parts, transformCompartment)
-			return nomnoml.Classifier(entity.type, entity.id, compartments)
+			return nomnoml.Classifier(entity.type, entity.id, compartments, entity.expandable)
 		}
 		return undefined
 	}

@@ -16,11 +16,11 @@ $(function (){
 	var canvasPanner = document.getElementById('canvas-panner')
 	var canvasTools = document.getElementById('canvas-tools')
 	var defaultSource = document.getElementById('defaultGraph').innerHTML
-	var focusSelector = document.getElementById('focusSelector')
-	var expandedNodes = {}
+	var expandedNodes = window.expandedNodes = {}
 	var zoomLevel = 0
 	var offset = {x:0, y:0}
 	var mouseDownPoint = false
+	var mouseDownClientPoint = false
 	var vm = skanaar.vector
 
 	window.addEventListener('hashchange', reloadStorage);
@@ -35,7 +35,6 @@ $(function (){
 	canvasPanner.addEventListener('mouseup', mouseUp)
 	canvasPanner.addEventListener('mouseleave', mouseUp)
 	canvasPanner.addEventListener('wheel', _.throttle(magnify, 50))
-	focusSelector.addEventListener('change', changeFocus)
 
 	initImageDownloadLink(imgLink, canvasElement)
 	initToolbarTooltips()
@@ -50,6 +49,7 @@ $(function (){
 	function mouseDown(e){
 		$(canvasPanner).css({width: '100%'})
 		mouseDownPoint = vm.diff({ x: e.pageX, y: e.pageY }, offset)
+		mouseDownClientPoint = {x: e.clientX, y: e.clientY}
 	}
 
 	function mouseMove(e){
@@ -69,35 +69,57 @@ $(function (){
 		sourceChanged()
 	}
 
-	function changeFocus() {
+	function canvasClick(e) {
+		var layout = currentModel.layout
+		var config = currentModel.config
+		var clickedNodes = []
+		var clickDist = vm.dist({ x: e.clientX, y: e.clientY }, mouseDownClientPoint)
+		if (clickDist > 20) { return }
+		recurseCanvasClick(clickedNodes, layout.nodes,
+			e,
+			canvasElement.offsetLeft,
+			canvasElement.offsetTop,
+			config.zoom
+		)
+		var clickedNode = clickedNodes.pop()
+		if (clickedNode) {
+			if (clickedNode.name.toLowerCase().slice(0,5) == "link:") {
+				window.open(clickedNode.name.slice(5))
+			}
+			expandedNodes[clickedNode.name] = !expandedNodes[clickedNode.name]
+		}
 		sourceChanged()
 	}
 
-	function canvasClick(e) {
-		var layout = currentModel.layout
-		var clickedNodes = []
-		recurseCanvasClick(clickedNodes, layout.nodes, e, canvasElement.offsetLeft, canvasElement.offsetTop)
-		var clickedNode = clickedNodes.pop()
-		if (clickedNode) { expandedNodes[clickedNode.name] = !expandedNodes[clickedNode.name] }
-		console.log(expandedNodes)
-	}
-
-	function recurseCanvasClick(clickedNodes, layoutNodes, e, px, py) {
+	function recurseCanvasClick(clickedNodes, layoutNodes, e, px, py, zoom) {
 		_.each(layoutNodes, function(n) {
 			var x = e.clientX
 			var y = e.clientY
 			var padding = currentModel.config.padding
 			var gutter = currentModel.config.gutter
-			var ncx = px + n.x
-			var ncy = py + n.y
-			var nx = ncx + padding + gutter - n.width/2
-			var ny = ncy + padding + gutter - n.height/2
-			if (x >= nx && x <= nx + n.width &&
-					y >= ny && y <= ny + n.height) {
-				clickedNodes.push(n)
+			var lineWidth = currentModel.config.lineWidth
+			var superSampling = window.devicePixelRatio || 1
+			var scale = superSampling * Math.exp(zoomLevel/10)
+			console.log(scale)
+			console.log(canvasElement.offsetLeft, canvasElement.offsetTop)
+			var ncx = px + (n.x + padding + gutter + lineWidth) * scale
+			var ncy = py + (n.y + padding + gutter + lineWidth) * scale
+			var nx = ncx - scale * (n.width/2 + lineWidth)
+			var ny = ncy - scale * (n.height/2 + lineWidth)
+			console.log(n.name, n, px, py, e)
+			// var outline = document.createElement('div')
+			// outline.style = "position: absolute; top: " + ny + "px; left: " + nx +
+			// "px; width: " + ((n.width) * scale) + "px; height: " + ((n.height) * scale) + "px; " +
+			// "border: 1px solid red;"
+			// if (zoom != 1) {
+			// 	document.body.appendChild(outline)
+			// }
+			if (x >= nx && x <= nx + (n.width) * scale &&
+					y >= ny && y <= ny + (n.height) * scale) {
+			  	clickedNodes.push(n)
 				_.each(n.compartments, function(c) {
-					recurseCanvasClick(clickedNodes, c.nodes, e, nx, ny)
-					ny += c.height
+					recurseCanvasClick(clickedNodes, c.nodes, e, nx, ny, zoom)
+					ny += c.height * scale
 				})
 			}
 		})
@@ -219,11 +241,6 @@ $(function (){
 		this.currentTextValue = value
 	}
 
-	function empty(n) {
-		while(n.children.length) {
-			n.removeChild(n.children[0])
-		}
-	}
 	var currentModel
 	function sourceChanged(){
 		var superSampling = window.devicePixelRatio || 1
@@ -234,32 +251,6 @@ $(function (){
 		return currentModel
 	}
 
-	function recurseAddNode(memo, n, parentName) {
-		parentName = parentName || ""
-		var name = parentName ? parentName + ">" + n.name : n.name
-		memo.push(name)
-		if (n.compartments && n.compartments.length > 0) {
-			_.each(n.compartments, function(c) {
-				if (c.nodes.length > 0) {
-					_.each(c.nodes, function(nn) {
-						recurseAddNode(memo, nn, name)
-					})
-				}
-			})
-		}
-	}
-
 	setCurrentText(defaultSource)
-	var model = sourceChanged()
-	var ast = model.ast
-	empty(focusSelector)
-	var focusNodes = ["Root"]
-	_.each(ast.nodes, function(n) {
-		recurseAddNode(focusNodes, n)
-	})
-	_.each(focusNodes, function(n) {
-		var option = document.createElement('option')
-		option.appendChild(document.createTextNode(n))
-		focusSelector.appendChild(option)
-	})
+	sourceChanged()
 })

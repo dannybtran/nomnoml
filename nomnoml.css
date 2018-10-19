@@ -5,11 +5,9 @@ html, body {
     margin: 0;
 	overflow-x: hidden;
 	overflow-y: hidden;
-	background: #fdf6e3;
 }
 hr {
 	border: 0;
-	background: #fdf6e3;
 	height: 5px;
 }
 h1 {
@@ -97,7 +95,6 @@ img {
 #canvas {
 	position: absolute;
 	cursor: move;
-	background-color: red;
 }
 a, a:active {
 	color: #000;
@@ -116,7 +113,6 @@ a:hover {
 	left: 10px;
 	font-family: Calibri, Helvetica, sans-serif;
 	font-weight: bold;
-	background: #fdf6e3;
 	border-radius: 5px;
 }
 .tools {
@@ -127,7 +123,6 @@ a:hover {
 	right: 20px;
 	font-family: Calibri, Helvetica, sans-serif;
 	font-weight: bold;
-	background: #fdf6e3;
 	border-radius: 5px;
 }
 .tools .canvas-tools {
@@ -162,7 +157,6 @@ a:hover {
 	top: 7px;
 	right: 20px;
 	text-align: right;
-	background: #fdf6e3;
 	border-radius: 2px;
 	padding: 0 5px;
 }
@@ -193,7 +187,6 @@ a:hover {
 	right:0;
 	bottom: 0;
 	width: 325px;
-	background-color: #fdf6e3;
 	box-shadow: -3px 0 6px rgba(0, 0, 0, 0.28);
 }
 .sidebar.visible {
@@ -206,7 +199,6 @@ a:hover {
 	right: 20px;
 	width: 300px;
 	height: 70px;
-	background: #fdf6e3
 }
 .content {
 	display: block;

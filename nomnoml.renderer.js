@@ -6,7 +6,7 @@ nomnoml.render = function (graphics, config, compartment, setFont){
 	var g = graphics
 	var vm = skanaar.vector
 
-	function renderCompartment(compartment, style, level){
+	function renderCompartment(compartment, style, level, pnode, partIndex){
 		g.save()
 		g.translate(padding, padding)
 		g.fillStyle(config.stroke)
@@ -15,7 +15,9 @@ nomnoml.render = function (graphics, config, compartment, setFont){
 			var x = style.center ? compartment.width/2 - padding : 0
 			var y = (0.5+(i+0.5)*config.leading)*config.fontSize
 			if (text){
-				g.fillText(text, x, y)
+				var suffix = pnode.expandable && partIndex == 0 ? "+" : ""
+				if (pnode.expandable && partIndex == 0 && window.expandedNodes[text]) { suffix = "-" }
+				g.fillText(text + suffix, x, y)
 			}
 			if (style.underline){
 				var w = g.measureText(text).width
@@ -51,7 +53,7 @@ nomnoml.render = function (graphics, config, compartment, setFont){
 			g.save()
 			g.translate(x, yDivider)
 			setFont(config, s.bold ? 'bold' : 'normal', s.italic)
-			renderCompartment(part, s, level+1)
+			renderCompartment(part, s, level+1, node, i)
 			g.restore()
 			if (i+1 === node.compartments.length) return
 			yDivider += part.height
@@ -106,7 +108,7 @@ nomnoml.render = function (graphics, config, compartment, setFont){
 	function findLabelQuadrant(point, rect, def) {
 		if (point.x < rect.x && point.y < rect.y-rect.height/2) return 1;
 		if (point.y > rect.y && point.x > rect.x+rect.width/2) return 1;
-		
+
 		if (point.x > rect.x && point.y < rect.y-rect.height/2) return 2;
 		if (point.y > rect.y && point.x < rect.x-rect.width/2) return 2;
 
@@ -132,7 +134,7 @@ nomnoml.render = function (graphics, config, compartment, setFont){
 			if (config.direction === "LR") return flipHorizontally[quadrant-1];
 			if (config.direction === "TD") return flipVertically[quadrant-1];
 		}
-		return quadrant; 	
+		return quadrant;
 	}
 
 	function renderRelation(r, compartment){
@@ -226,6 +228,6 @@ nomnoml.render = function (graphics, config, compartment, setFont){
 	g.strokeStyle(config.stroke)
 	g.scale(config.zoom, config.zoom)
 	snapToPixels()
-	renderCompartment(compartment, {}, 0)
+	renderCompartment(compartment, {}, 0, null, null)
 	g.restore()
 }

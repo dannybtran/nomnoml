@@ -54,8 +54,8 @@ var nomnoml = nomnoml || {};
 		graphics.font(font)
 	}
 
-	function parseAndRender(code, graphics, canvas, scale, focus) {
-		var resp = nomnoml.parse(code, focus);
+	function parseAndRender(code, graphics, canvas, scale, expandedNodes) {
+		var resp = nomnoml.parse(code, expandedNodes);
 		var ast = resp.ast
 		var focusAst = resp.focusAst
 		var config = getConfig(ast.directives);
@@ -71,8 +71,8 @@ var nomnoml = nomnoml || {};
 		return { config: config, ast: ast, layout: layout };
 	}
 
-	nomnoml.draw = function (canvas, code, scale, focus) {
-		return parseAndRender(code, skanaar.Canvas(canvas), canvas, scale || 1, focus)
+	nomnoml.draw = function (canvas, code, scale, expandedNodes) {
+		return parseAndRender(code, skanaar.Canvas(canvas), canvas, scale || 1, expandedNodes)
 	};
 
 	nomnoml.renderSvg = function (code) {
