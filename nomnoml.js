@@ -54,23 +54,25 @@ var nomnoml = nomnoml || {};
 		graphics.font(font)
 	}
 
-	function parseAndRender(code, graphics, canvas, scale) {
-		var ast = nomnoml.parse(code);
+	function parseAndRender(code, graphics, canvas, scale, focus) {
+		var resp = nomnoml.parse(code, focus);
+		var ast = resp.ast
+		var focusAst = resp.focusAst
 		var config = getConfig(ast.directives);
 		var measurer = {
 			setFont: function (a, b, c) { setFont(a, b, c, graphics); },
 			textWidth: function (s) { return graphics.measureText(s).width },
 			textHeight: function () { return config.leading * config.fontSize }
 		};
-		var layout = nomnoml.layout(measurer, config, ast);
+		var layout = nomnoml.layout(measurer, config, focusAst);
 		fitCanvasSize(canvas, layout, config.zoom * scale);
 		config.zoom *= scale;
 		nomnoml.render(graphics, config, layout, measurer.setFont);
-		return { config: config };
+		return { config: config, ast: ast, layout: layout };
 	}
 
-	nomnoml.draw = function (canvas, code, scale) {
-		return parseAndRender(code, skanaar.Canvas(canvas), canvas, scale || 1)
+	nomnoml.draw = function (canvas, code, scale, focus) {
+		return parseAndRender(code, skanaar.Canvas(canvas), canvas, scale || 1, focus)
 	};
 
 	nomnoml.renderSvg = function (code) {

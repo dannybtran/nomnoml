@@ -16,33 +16,27 @@ $(function (){
 	var canvasPanner = document.getElementById('canvas-panner')
 	var canvasTools = document.getElementById('canvas-tools')
 	var defaultSource = document.getElementById('defaultGraph').innerHTML
+	var focusSelector = document.getElementById('focusSelector')
+	var expandedNodes = {}
 	var zoomLevel = 0
 	var offset = {x:0, y:0}
 	var mouseDownPoint = false
 	var vm = skanaar.vector
 
-	var editor = CodeMirror.fromTextArea(textarea, {
-		lineNumbers: true,
-		mode: 'nomnoml',
-		matchBrackets: true,
-		theme: 'solarized light',
-		keyMap: 'sublime'
-	});
-
-	var editorElement = editor.getWrapperElement()
-
 	window.addEventListener('hashchange', reloadStorage);
 	window.addEventListener('resize', _.throttle(sourceChanged, 750, {leading: true}))
-	editor.on('changes', _.debounce(sourceChanged, 300))
 	canvasPanner.addEventListener('mouseenter', classToggler(jqBody, 'canvas-mode', true))
 	canvasPanner.addEventListener('mouseleave', classToggler(jqBody, 'canvas-mode', false))
 	canvasTools.addEventListener('mouseenter', classToggler(jqBody, 'canvas-mode', true))
 	canvasTools.addEventListener('mouseleave', classToggler(jqBody, 'canvas-mode', false))
 	canvasPanner.addEventListener('mousedown', mouseDown)
 	window.addEventListener('mousemove', _.throttle(mouseMove,50))
+	canvasPanner.addEventListener('mouseup', canvasClick)
 	canvasPanner.addEventListener('mouseup', mouseUp)
 	canvasPanner.addEventListener('mouseleave', mouseUp)
 	canvasPanner.addEventListener('wheel', _.throttle(magnify, 50))
+	focusSelector.addEventListener('change', changeFocus)
+
 	initImageDownloadLink(imgLink, canvasElement)
 	initToolbarTooltips()
 
@@ -65,14 +59,48 @@ $(function (){
 		}
 	}
 
-	function mouseUp(){
+	function mouseUp(e){
 		mouseDownPoint = false
-		$(canvasPanner).css({width: '33%'})
+		$(canvasPanner).css({width: '100%'})
 	}
 
 	function magnify(e){
 		zoomLevel = Math.min(10, zoomLevel - (e.deltaY < 0 ? -1 : 1))
 		sourceChanged()
+	}
+
+	function changeFocus() {
+		sourceChanged()
+	}
+
+	function canvasClick(e) {
+		var layout = currentModel.layout
+		var clickedNodes = []
+		recurseCanvasClick(clickedNodes, layout.nodes, e, canvasElement.offsetLeft, canvasElement.offsetTop)
+		var clickedNode = clickedNodes.pop()
+		if (clickedNode) { expandedNodes[clickedNode.name] = !expandedNodes[clickedNode.name] }
+		console.log(expandedNodes)
+	}
+
+	function recurseCanvasClick(clickedNodes, layoutNodes, e, px, py) {
+		_.each(layoutNodes, function(n) {
+			var x = e.clientX
+			var y = e.clientY
+			var padding = currentModel.config.padding
+			var gutter = currentModel.config.gutter
+			var ncx = px + n.x
+			var ncy = py + n.y
+			var nx = ncx + padding + gutter - n.width/2
+			var ny = ncy + padding + gutter - n.height/2
+			if (x >= nx && x <= nx + n.width &&
+					y >= ny && y <= ny + n.height) {
+				clickedNodes.push(n)
+				_.each(n.compartments, function(c) {
+					recurseCanvasClick(clickedNodes, c.nodes, e, nx, ny)
+					ny += c.height
+				})
+			}
+		})
 	}
 
 	nomnoml.magnifyViewport = function (diff){
@@ -102,7 +130,7 @@ $(function (){
 	}
 
 	nomnoml.saveViewModeToStorage = function (){
-		var question = 
+		var question =
 			'Do you want to overwrite the diagram in ' +
 			'localStorage with the currently viewed diagram?'
 		if (confirm(question)){
@@ -181,41 +209,57 @@ $(function (){
 	}
 
 	function reloadStorage(){
-		storage = buildStorage(location.hash)
-		editor.setValue(storage.read())
-		sourceChanged()
-		if (storage.isReadonly) storageStatusElement.show()
-		else storageStatusElement.hide()
 	}
 
 	function currentText(){
-		return editor.getValue()
+		return this.currentTextValue
 	}
 
 	function setCurrentText(value){
-		return editor.setValue(value)
+		this.currentTextValue = value
 	}
 
-	function sourceChanged(){
-		try {
-			lineMarker.css('top', -30)
-			lineNumbers.toggleClass('error', false)
-			var superSampling = window.devicePixelRatio || 1
-			var scale = superSampling * Math.exp(zoomLevel/10)
-
-			var model = nomnoml.draw(canvasElement, currentText(), scale)
-			positionCanvas(canvasElement, superSampling, offset)
-			setFilename(model.config.title)
-			storage.save(currentText())
-		} catch (e){
-			var matches = e.message.match('line ([0-9]*)')
-			lineNumbers.toggleClass('error', true)
-			if (matches){
-				var lineHeight = parseFloat($(editorElement).css('line-height'))
-				lineMarker.css('top', 3 + lineHeight*matches[1])
-			} else {
-				throw e
-			}
+	function empty(n) {
+		while(n.children.length) {
+			n.removeChild(n.children[0])
 		}
 	}
+	var currentModel
+	function sourceChanged(){
+		var superSampling = window.devicePixelRatio || 1
+		var scale = superSampling * Math.exp(zoomLevel/10)
+		currentModel = nomnoml.draw(canvasElement, currentText(), scale, expandedNodes)
+		positionCanvas(canvasElement, superSampling, offset)
+		setFilename(currentModel.config.title)
+		return currentModel
+	}
+
+	function recurseAddNode(memo, n, parentName) {
+		parentName = parentName || ""
+		var name = parentName ? parentName + ">" + n.name : n.name
+		memo.push(name)
+		if (n.compartments && n.compartments.length > 0) {
+			_.each(n.compartments, function(c) {
+				if (c.nodes.length > 0) {
+					_.each(c.nodes, function(nn) {
+						recurseAddNode(memo, nn, name)
+					})
+				}
+			})
+		}
+	}
+
+	setCurrentText(defaultSource)
+	var model = sourceChanged()
+	var ast = model.ast
+	empty(focusSelector)
+	var focusNodes = ["Root"]
+	_.each(ast.nodes, function(n) {
+		recurseAddNode(focusNodes, n)
+	})
+	_.each(focusNodes, function(n) {
+		var option = document.createElement('option')
+		option.appendChild(document.createTextNode(n))
+		focusSelector.appendChild(option)
+	})
 })

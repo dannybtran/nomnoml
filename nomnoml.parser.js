@@ -1,6 +1,6 @@
 var nomnoml = nomnoml || {}
 
-nomnoml.parse = function (source){
+nomnoml.parse = function (source, focus){
 	function onlyCompilables(line){
 		var ok = line[0] !== '#' && line.substring(0,2) !== '//'
 		return ok ? line : ''
@@ -21,12 +21,59 @@ nomnoml.parse = function (source){
 	}))
 	var pureDiagramCode = _.map(_.pluck(lines, 'text'), onlyCompilables).join('\n').trim()
 	var ast = nomnoml.transformParseIntoSyntaxTree(nomnoml.intermediateParse(pureDiagramCode))
+	var focusAst = nomnoml.transformParseIntoSyntaxTree(nomnoml.intermediateParse(pureDiagramCode, focus))
 	ast.directives = directives
-	return ast
+	return { ast: ast, focusAst: focusAst }
 }
 
-nomnoml.intermediateParse = function (source){
-	return nomnomlCoreParser.parse(source)
+nomnoml.intermediateParse = function (source, focus){
+	var arr = nomnomlCoreParser.parse(source)
+	var narr
+	if (focus) {
+		var focusPath = focus.split(">")
+		narr = nomnoml.focusParse(arr, focusPath)
+	} else {
+		narr = arr
+	}
+	return narr
+}
+
+nomnoml.focusParse = function(arr, focusPath) {
+	var narr
+	var path = focusPath.shift()
+	narr = arr.map(function(i) {
+		if (path == "Root" || path == undefined) {
+			var ni
+			if (i.parts) {
+	  		ni = Object.assign({}, i, {parts:
+				  i.parts && i.parts.length > 0 ? i.parts[0] : []
+  			})
+			} else {
+				ni = i
+			}
+			return !i.id ? ni : null
+		} else {
+			if (path && i.id == path) {
+				var resp = Object.assign({}, i, {
+					parts: i.parts.map(function(p) {
+						return nomnoml.focusParse(p, focusPath.slice())
+					})
+				})
+				return resp
+			} else {
+				var ni
+				if (i.parts) {
+		  		ni = Object.assign({}, i, {parts:
+					  i.parts && i.parts.length > 0 ? i.parts[0] : []
+	  			})
+				} else {
+					ni = i
+				}
+				return !i.id ? ni : null
+			}
+		}
+	}).filter(function(i) { return i })
+	return narr
 }
 
 nomnoml.transformParseIntoSyntaxTree = function (entity){
